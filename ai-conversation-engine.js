@@ -350,11 +350,11 @@ const detectarIntencion = (texto) => {
             peso: 4
         },
         modelo_iphone: {
-            patrones: [/iphone/i, /iphone\s*13/i, /\bios\b/i, /apple/i],
+            patrones: [/iphone/i, /iphone\s*13/i],
             peso: 4
         },
         buscar_iphone: {
-            patrones: [/iphone/i, /apple/i, /\bios\b/i],
+            patrones: [/iphone/i, /apple/i],
             peso: 3
         },
         buscar_motorola: {
