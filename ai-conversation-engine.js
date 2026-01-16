@@ -300,7 +300,7 @@ const tarifarioEnvios = {
             });
         }
 
-        respuesta += `\n💡 _Incluye recolección a domicilio y guía prepagada_`;
+        respuesta += `\n💡 _Lleva tu paquete a la sucursal Celexpress más cercana a tu domicilio_`;
 
         return respuesta;
     }
@@ -350,11 +350,11 @@ const detectarIntencion = (texto) => {
             peso: 4
         },
         modelo_iphone: {
-            patrones: [/iphone/i, /iphone\s*13/i],
+            patrones: [/iphone/i, /iphone\s*13/i, /\bios\b/i, /apple/i],
             peso: 4
         },
         buscar_iphone: {
-            patrones: [/iphone/i, /apple/i, /ios/i],
+            patrones: [/iphone/i, /apple/i, /\bios\b/i],
             peso: 3
         },
         buscar_motorola: {
@@ -402,10 +402,10 @@ const detectarIntencion = (texto) => {
             peso: 3
         },
         
-        // ENVÍOS
+        // ENVÍOS - Prioridad alta
         cotizar_envio: {
-            patrones: [/envio/i, /enviar/i, /paquete/i, /mandar/i, /guia/i, /recoleccion/i, /cotizar/i],
-            peso: 2
+            patrones: [/envio/i, /enviar/i, /paquete/i, /mandar/i, /guia/i, /cotizar/i, /mensajeria/i, /paqueteria/i],
+            peso: 4
         },
         
         // INFORMACIÓN PESO
@@ -545,7 +545,7 @@ Solo dime qué te interesa 👆
     escalarHumano: `
 Entiendo, te conecto con un asesor 👨‍💼
 
-📞 Puedes llamarnos al: *55-XXXX-XXXX*
+📞 Puedes llamarnos al: *56 6019 4420*
 📱 O un asesor te contactará en breve
 
 ¿Me dejas tu nombre y número para que te llamen?
@@ -1205,7 +1205,7 @@ Puedes enviármelos aquí mismo 📝
 
 Un asesor de *CelExpress* te contactará en breve para continuar con tu trámite.
 
-📞 También puedes llamarnos: *55-XXXX-XXXX*
+📞 También puedes llamarnos: *56 6019 4420*
 
 ¡Gracias por tu preferencia! 🙏
         `.trim();
@@ -1221,8 +1221,8 @@ Un asesor de *CelExpress* te contactará en breve para continuar con tu trámite
         return `
 Entiendo, te conecto con un asesor real 👨‍💼
 
-📞 *Llámanos:* 55-XXXX-XXXX
-📍 *Visítanos:* [Dirección de la tienda]
+📞 *Llámanos:* 56 6019 4420
+📍 *Visítanos:* Sucursal Celexpress más cercana
 ⏰ *Horario:* Lun-Sáb 9am-7pm
 
 O si prefieres, déjame tu número y te llamamos nosotros 📱
@@ -1245,7 +1245,7 @@ Para atenderte mejor, ¿podrías decirme:
 
 Un supervisor revisará tu caso personalmente.
 
-📞 También puedes llamar a soporte: *55-XXXX-XXXX*
+📞 También puedes llamar a soporte: *56 6019 4420*
         `.trim();
     }
 
@@ -1262,8 +1262,8 @@ Lunes a Sábado: 9:00am - 7:00pm
 Domingo: Cerrado
 
 📱 *Contacto:*
-WhatsApp: 55-XXXX-XXXX
-Tel: 55-XXXX-XXXX
+WhatsApp: 56 6019 4420
+Tel: 56 6019 4420
 
 ¡Te esperamos! 🎉
         `.trim();
