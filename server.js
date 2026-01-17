@@ -1,12 +1,14 @@
 /**
  * ============================================================
- * 🚀 CELEXPRESS WHATSAPP BOT - SERVIDOR PRINCIPAL v2.2
+ * 🚀 CELEXPRESS WHATSAPP BOT - SERVIDOR PRINCIPAL v3.0
  * ============================================================
  * Bot ultra-humanizado para celulares y envíos
  * 
- * CAMBIOS v2.2:
- * - Dashboard muestra CP Origen y CP Destino
- * - Leads incluyen códigos postales
+ * CAMBIOS v3.0:
+ * - Flujo de envíos paso a paso (Origen → Destino → Paquete)
+ * - Dashboard muestra datos completos de envío
+ * - Soporte códigos postales internacionales
+ * - Precios cotizados por asistente humano
  */
 
 require('dotenv').config();
@@ -83,7 +85,13 @@ app.post('/whatsapp', async (req, res) => {
 
         // Detectar y registrar leads
         const ctx = celexpressAI.context.get(numero);
-        if (ctx.datosCliente.email || ctx.datosCliente.telefono) {
+        
+        // Registrar lead de envío cuando se completan los datos
+        if (ctx.etapa === 'envio_datos_completos' && ctx.datosEnvio) {
+            registrarLeadEnvio(numero, nombre, ctx);
+        }
+        // Registrar lead de celular
+        else if (ctx.datosCliente.email || ctx.datosCliente.telefono) {
             registrarLead(numero, nombre, ctx);
         }
 
@@ -112,11 +120,40 @@ async function notificarNuevoLead(lead) {
 📧 Email: ${lead.email || 'No proporcionado'}
 💬 Interés: ${lead.interes || 'General'}`;
 
-        // Agregar CPs si es envío
-        if (lead.cpOrigen || lead.cpDestino) {
+        // Agregar datos de envío si aplica
+        if (lead.interes === 'Envío' && lead.datosEnvio) {
+            const origen = lead.datosEnvio.origen;
+            const destino = lead.datosEnvio.destino;
+            const paquete = lead.datosEnvio.paquete;
+
             mensaje += `
-📍 CP Origen: ${lead.cpOrigen || '-'}
-📍 CP Destino: ${lead.cpDestino || '-'}`;
+
+━━━ DATOS DE ENVÍO ━━━
+
+📍 *ORIGEN:*
+${origen.nombre}
+${origen.calle}, ${origen.colonia}
+${origen.ciudad}, ${origen.estado}
+CP: ${origen.codigoPostal}
+Tel: ${origen.telefono}
+
+📍 *DESTINO:*
+${destino.nombre}
+${destino.calle}, ${destino.colonia}
+${destino.ciudad}, ${destino.estado}
+CP: ${destino.codigoPostal}
+Tel: ${destino.telefono}
+
+📦 *PAQUETE:*
+${paquete.contenido}
+Valor: ${paquete.precioPorPieza}
+Medidas: ${paquete.medidas} cm
+Peso: ${paquete.peso} kg
+Paquetería: ${paquete.paqueteria}`;
+        } else if (lead.cpOrigen || lead.cpDestino) {
+            mensaje += `
+📮 CP Origen: ${lead.cpOrigen || '-'}
+📮 CP Destino: ${lead.cpDestino || '-'}`;
         }
 
         mensaje += `
@@ -135,6 +172,33 @@ async function notificarNuevoLead(lead) {
     }
 }
 
+function registrarLeadEnvio(numero, nombre, ctx) {
+    const leadExistente = leads.find(l => l.numero === numero && l.interes === 'Envío');
+    
+    const nuevoLead = {
+        numero,
+        nombre: ctx.datosEnvio.origen.nombre || nombre,
+        telefono: ctx.datosEnvio.origen.telefono,
+        email: ctx.datosCliente.email || null,
+        cpOrigen: ctx.datosEnvio.origen.codigoPostal,
+        cpDestino: ctx.datosEnvio.destino.codigoPostal,
+        interes: 'Envío',
+        datosEnvio: ctx.datosEnvio,
+        fecha: new Date(),
+        estado: 'nuevo'
+    };
+
+    if (!leadExistente) {
+        leads.push(nuevoLead);
+        analytics.leadsCapturados++;
+        analytics.cotizacionesEnvio++;
+        notificarNuevoLead(nuevoLead);
+        console.log(`🎯 Nuevo lead de envío registrado: ${nuevoLead.nombre || numero}`);
+    } else {
+        Object.assign(leadExistente, nuevoLead, { estado: 'actualizado' });
+    }
+}
+
 function registrarLead(numero, nombre, ctx) {
     const leadExistente = leads.find(l => l.numero === numero);
     
@@ -146,7 +210,7 @@ function registrarLead(numero, nombre, ctx) {
         cpOrigen: ctx.datosCliente.cpOrigen || null,
         cpDestino: ctx.datosCliente.cpDestino || null,
         interes: ctx.cotizacionEnvio ? 'Envío' : 'Celular',
-        cotizacion: ctx.cotizacionEnvio,
+        datosEnvio: ctx.datosEnvio || null,
         fecha: new Date(),
         estado: 'nuevo'
     };
@@ -154,6 +218,7 @@ function registrarLead(numero, nombre, ctx) {
     if (!leadExistente) {
         leads.push(nuevoLead);
         analytics.leadsCapturados++;
+        if (nuevoLead.interes === 'Celular') analytics.consultasCelulares++;
         notificarNuevoLead(nuevoLead);
         console.log(`🎯 Nuevo lead registrado: ${nombre || numero}`);
     } else {
@@ -167,7 +232,7 @@ function registrarLead(numero, nombre, ctx) {
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK', version: '2.2', timestamp: new Date().toISOString() });
+    res.json({ status: 'OK', version: '3.0', timestamp: new Date().toISOString() });
 });
 
 // Dashboard principal
@@ -199,11 +264,11 @@ app.get('/', (req, res) => {
         }
         .stat-number { font-size: 3em; font-weight: bold; color: #667eea; }
         .stat-label { color: #666; margin-top: 10px; font-size: 1.1em; }
-        .leads-section { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); overflow-x: auto; }
+        .leads-section { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); overflow-x: auto; margin-bottom: 30px; }
         .leads-section h2 { color: #333; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; min-width: 900px; }
-        th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.9em; }
-        th { background: #f8f9fa; color: #333; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; min-width: 1100px; }
+        th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.85em; }
+        th { background: #f8f9fa; color: #333; font-weight: 600; position: sticky; top: 0; }
         .badge {
             display: inline-block; padding: 4px 12px; border-radius: 20px;
             font-size: 0.85em; font-weight: 500;
@@ -231,11 +296,36 @@ app.get('/', (req, res) => {
             text-align: center; 
             margin-bottom: 20px;
         }
+        .details-btn {
+            background: #667eea; color: white; border: none;
+            padding: 4px 10px; border-radius: 5px; cursor: pointer;
+            font-size: 0.8em;
+        }
+        .details-btn:hover { background: #5a6fd6; }
+        .modal {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.5);
+            z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white; padding: 30px; border-radius: 15px;
+            max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+        }
+        .modal-close {
+            float: right; background: none; border: none;
+            font-size: 1.5em; cursor: pointer; color: #666;
+        }
+        .detail-section { margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 10px; }
+        .detail-section h4 { color: #667eea; margin-bottom: 10px; }
+        .detail-row { display: flex; margin: 5px 0; }
+        .detail-label { font-weight: 600; width: 120px; color: #666; }
+        .detail-value { flex: 1; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🤖 CelExpress Bot <span class="version">v2.2</span></h1>
+        <h1>🤖 CelExpress Bot <span class="version">v3.0</span></h1>
         
         <div class="contact-info">
             📞 Contacto: <strong>56 6019 4420</strong> | ⏰ Lunes a Sábado 9am - 7pm
@@ -258,6 +348,14 @@ app.get('/', (req, res) => {
                 <div class="stat-number">${leadsHoy}</div>
                 <div class="stat-label">📅 Leads Hoy</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-number">${analytics.cotizacionesEnvio}</div>
+                <div class="stat-label">📦 Cotizaciones Envío</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">${analytics.consultasCelulares}</div>
+                <div class="stat-label">📱 Consultas Celulares</div>
+            </div>
         </div>
 
         <div class="leads-section">
@@ -273,10 +371,11 @@ app.get('/', (req, res) => {
                         <th>CP Origen</th>
                         <th>CP Destino</th>
                         <th>Fecha</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${leads.slice(-15).reverse().map(l => `
+                    ${leads.slice(-20).reverse().map((l, idx) => `
                     <tr>
                         <td>${l.nombre || '-'}</td>
                         <td>${l.telefono || '-'}</td>
@@ -285,6 +384,9 @@ app.get('/', (req, res) => {
                         <td>${l.cpOrigen ? `<span class="cp-badge">${l.cpOrigen}</span>` : '-'}</td>
                         <td>${l.cpDestino ? `<span class="cp-badge">${l.cpDestino}</span>` : '-'}</td>
                         <td>${new Date(l.fecha).toLocaleString('es-MX')}</td>
+                        <td>
+                            ${l.datosEnvio ? `<button class="details-btn" onclick="showDetails(${leads.length - 1 - idx})">Ver detalles</button>` : '-'}
+                        </td>
                     </tr>
                     `).join('')}
                 </tbody>
@@ -300,6 +402,77 @@ app.get('/', (req, res) => {
             </center>
         </div>
     </div>
+
+    <!-- Modal para detalles de envío -->
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <h2>📦 Detalles del Envío</h2>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        const leadsData = ${JSON.stringify(leads.slice(-20).reverse())};
+
+        function showDetails(idx) {
+            const lead = leadsData[idx];
+            if (!lead || !lead.datosEnvio) return;
+
+            const e = lead.datosEnvio;
+            let html = '';
+
+            if (e.origen) {
+                html += \`
+                <div class="detail-section">
+                    <h4>📍 ORIGEN</h4>
+                    <div class="detail-row"><span class="detail-label">Nombre:</span><span class="detail-value">\${e.origen.nombre || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">RFC:</span><span class="detail-value">\${e.origen.rfc || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Dirección:</span><span class="detail-value">\${e.origen.calle || '-'}, \${e.origen.colonia || ''}</span></div>
+                    <div class="detail-row"><span class="detail-label">Ciudad:</span><span class="detail-value">\${e.origen.ciudad || '-'}, \${e.origen.estado || ''}</span></div>
+                    <div class="detail-row"><span class="detail-label">CP:</span><span class="detail-value">\${e.origen.codigoPostal || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Teléfono:</span><span class="detail-value">\${e.origen.telefono || '-'}</span></div>
+                </div>\`;
+            }
+
+            if (e.destino) {
+                html += \`
+                <div class="detail-section">
+                    <h4>📍 DESTINO</h4>
+                    <div class="detail-row"><span class="detail-label">Nombre:</span><span class="detail-value">\${e.destino.nombre || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">RFC:</span><span class="detail-value">\${e.destino.rfc || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Dirección:</span><span class="detail-value">\${e.destino.calle || '-'}, \${e.destino.colonia || ''}</span></div>
+                    <div class="detail-row"><span class="detail-label">Ciudad:</span><span class="detail-value">\${e.destino.ciudad || '-'}, \${e.destino.estado || ''}</span></div>
+                    <div class="detail-row"><span class="detail-label">CP:</span><span class="detail-value">\${e.destino.codigoPostal || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Teléfono:</span><span class="detail-value">\${e.destino.telefono || '-'}</span></div>
+                </div>\`;
+            }
+
+            if (e.paquete) {
+                html += \`
+                <div class="detail-section">
+                    <h4>📦 PAQUETE</h4>
+                    <div class="detail-row"><span class="detail-label">Contenido:</span><span class="detail-value">\${e.paquete.contenido || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Valor:</span><span class="detail-value">\${e.paquete.precioPorPieza || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Medidas:</span><span class="detail-value">\${e.paquete.medidas || '-'} cm</span></div>
+                    <div class="detail-row"><span class="detail-label">Peso:</span><span class="detail-value">\${e.paquete.peso || '-'} kg</span></div>
+                    <div class="detail-row"><span class="detail-label">Paquetería:</span><span class="detail-value">\${e.paquete.paqueteria || '-'}</span></div>
+                </div>\`;
+            }
+
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('detailsModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('detailsModal').classList.remove('active');
+        }
+
+        // Cerrar modal al hacer clic fuera
+        document.getElementById('detailsModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+    </script>
 </body>
 </html>
     `);
@@ -320,6 +493,15 @@ app.get('/api/analytics', (req, res) => {
         conversaciones: analytics.conversaciones.size,
         leadsHoy: leads.filter(l => new Date(l.fecha).toDateString() === new Date().toDateString()).length
     });
+});
+
+// API: Obtener lead específico con detalles
+app.get('/api/leads/:id', (req, res) => {
+    const lead = leads[req.params.id];
+    if (!lead) {
+        return res.status(404).json({ error: 'Lead no encontrado' });
+    }
+    res.json(lead);
 });
 
 // API: Simular mensaje (para pruebas)
@@ -343,6 +525,12 @@ app.post('/api/test', async (req, res) => {
     }
 });
 
+// API: Reiniciar conversación (para pruebas)
+app.post('/api/reset/:numero', (req, res) => {
+    celexpressAI.context.clear(req.params.numero);
+    res.json({ success: true, message: `Conversación ${req.params.numero} reiniciada` });
+});
+
 // ============================================================
 // 🚀 INICIAR SERVIDOR
 // ============================================================
@@ -350,13 +538,16 @@ app.listen(PORT, () => {
     console.log(`
 ╔═══════════════════════════════════════════════╗
 ║                                               ║
-║   🤖 CELEXPRESS BOT ACTIVO v2.2               ║
+║   🤖 CELEXPRESS BOT ACTIVO v3.0               ║
 ║                                               ║
 ║   Puerto: ${PORT}                               ║
 ║   Dashboard: http://localhost:${PORT}           ║
 ║   Webhook: http://localhost:${PORT}/whatsapp    ║
 ║                                               ║
 ║   Twilio: ${client ? '✅ Conectado' : '❌ No configurado'}             ║
+║                                               ║
+║   NUEVO: Flujo de envíos paso a paso          ║
+║   1) Origen → 2) Destino → 3) Paquete         ║
 ║                                               ║
 ╚═══════════════════════════════════════════════╝
     `);
