@@ -1,20 +1,18 @@
 /**
  * ============================================================
- * 🤖 CELEXPRESS AI CONVERSATION ENGINE v2.2
+ * 🤖 CELEXPRESS AI CONVERSATION ENGINE v3.0
  * Sistema de IA Conversacional Ultra-Humanizado
  * ============================================================
  * 
- * CAMBIOS v2.2:
- * - Códigos postales (5 dígitos) en lugar de ciudades
- * - Detección más robusta de datos
+ * CAMBIOS v3.0:
+ * - Flujo de envíos paso a paso: 1) Origen, 2) Destino, 3) Datos adicionales
+ * - Soporte para códigos postales internacionales (no solo México)
+ * - Precios de envío cotizados por asistente humano
+ * - Captura completa de datos para logística
  * 
- * CAMBIOS v2.1:
- * - Eliminado catálogo de equipos (sin marcas/modelos)
- * - Enfoque en capacidad de pago semanal
- * - Número de contacto: 56 6019 4420
- * - "Lleva tu paquete a CelExpress más cercano" (sin recolección)
- * - Captura de datos mejorada: todos juntos en una sola respuesta
- * - Eliminada confusión envíos vs iOS
+ * CAMBIOS v2.2:
+ * - Códigos postales en lugar de ciudades
+ * - Detección más robusta de datos
  */
 
 // ============================================================
@@ -58,110 +56,6 @@ En CelExpress te damos facilidades reales para que estrenes tu celular HOY:
 };
 
 // ============================================================
-// 🚚 TARIFARIO DE ENVÍOS
-// ============================================================
-const tarifarioEnvios = {
-    FEDEX: {
-        economico: [184, 189, 197, 209, 218, 230, 252, 274, 295, 310, 322, 326, 326, 326, 326],
-        express: [217, 240, 240, 240, 240, 424, 506, 590, 673, 757, 840, 924, 1008, 1091, 1175]
-    },
-    DHL: {
-        economico: [179, 182, 202, 221, 221, 334, 360, 422, 484, 546, 610, 673, 738, 802, 869],
-        express: [185, 227, 227, 227, 227, 365, 365, 426, 490, 552, 617, 682, 748, 812, 880]
-    },
-    ESTAFETA: {
-        economico: [173, 173, 173, 173, 173, 181, 187, 194, 200, 207, 214, 222, 229, 231, 231],
-        express: [216, 237, 257, 279, 300, 322, 343, 364, 386, 406, 428, 449, 470, 492, 512]
-    },
-
-    obtenerMargen: function(peso) {
-        if (peso <= 5) return 0.60;
-        if (peso <= 15) return 0.50;
-        if (peso <= 30) return 0.40;
-        return 0.30;
-    },
-
-    cotizar: function(peso) {
-        const pesoRedondeado = Math.ceil(peso);
-        
-        if (pesoRedondeado < 1 || pesoRedondeado > 15) {
-            return { 
-                error: true, 
-                mensaje: `Manejamos envíos de 1 a 15 kg. Para paquetes más grandes, contáctanos directamente 😊\n\n📞 ${CONTACTO.telefono}` 
-            };
-        }
-
-        const margen = this.obtenerMargen(pesoRedondeado);
-        const opciones = [];
-
-        for (const [paqueteria, servicios] of Object.entries(this).filter(([k]) => ['FEDEX', 'DHL', 'ESTAFETA'].includes(k))) {
-            const costoEco = servicios.economico?.[pesoRedondeado - 1];
-            const costoExp = servicios.express?.[pesoRedondeado - 1];
-
-            if (costoEco) {
-                opciones.push({
-                    paqueteria,
-                    servicio: 'Económico',
-                    costo: costoEco,
-                    precio: Math.round(costoEco * (1 + margen)),
-                    tiempo: '3-5 días hábiles'
-                });
-            }
-            if (costoExp) {
-                opciones.push({
-                    paqueteria,
-                    servicio: 'Express',
-                    costo: costoExp,
-                    precio: Math.round(costoExp * (1 + margen)),
-                    tiempo: '1-2 días hábiles'
-                });
-            }
-        }
-
-        opciones.sort((a, b) => a.precio - b.precio);
-
-        return {
-            error: false,
-            peso: pesoRedondeado,
-            opciones,
-            mejorPrecio: opciones[0],
-            masRapido: opciones.filter(o => o.servicio === 'Express').sort((a, b) => a.precio - b.precio)[0]
-        };
-    },
-
-    formatearCotizacion: function(cotizacion) {
-        if (cotizacion.error) return cotizacion.mensaje;
-
-        const economicos = cotizacion.opciones.filter(o => o.servicio === 'Económico');
-        const express = cotizacion.opciones.filter(o => o.servicio === 'Express');
-
-        let respuesta = `📦 *Tu cotización para ${cotizacion.peso} kg*\n\n`;
-
-        if (economicos.length > 0) {
-            respuesta += `🚚 *ENVÍO ECONÓMICO* (3-5 días)\n`;
-            economicos.forEach((op, i) => {
-                const tag = i === 0 ? ' ⭐ _Mejor precio_' : '';
-                respuesta += `   • ${op.paqueteria}: *$${op.precio} MXN*${tag}\n`;
-            });
-            respuesta += '\n';
-        }
-
-        if (express.length > 0) {
-            respuesta += `⚡ *ENVÍO EXPRESS* (1-2 días)\n`;
-            express.forEach((op, i) => {
-                const tag = i === 0 ? ' 🚀 _Más rápido_' : '';
-                respuesta += `   • ${op.paqueteria}: *$${op.precio} MXN*${tag}\n`;
-            });
-        }
-
-        respuesta += `\n📍 *Lleva tu paquete a CelExpress más cercano*`;
-        respuesta += `\n📞 Dudas: ${CONTACTO.telefono}`;
-
-        return respuesta;
-    }
-};
-
-// ============================================================
 // 🧠 MOTOR DE INTENCIONES
 // ============================================================
 const detectarIntencion = (texto) => {
@@ -186,7 +80,9 @@ const detectarIntencion = (texto) => {
                 /\bfedex/i,
                 /\bdhl/i,
                 /\bestafeta/i,
-                /\benvios\b/i
+                /\benvios\b/i,
+                /\blogistica/i,
+                /\bhws/i
             ],
             peso: 10
         },
@@ -213,13 +109,8 @@ const detectarIntencion = (texto) => {
             peso: 5
         },
         
-        dar_peso: {
-            patrones: [/(\d+(?:\.\d+)?)\s*(kg|kilo|kilogramo)?/i],
-            peso: 2
-        },
-        
         confirmar_si: {
-            patrones: [/^si$/i, /^s[ií]$/i, /^ok$/i, /^dale$/i, /^va$/i, /^claro$/i, /^simon$/i, /^sale$/i, /^perfecto$/i, /adelante/i, /de\s*acuerdo/i, /^yes$/i],
+            patrones: [/^si$/i, /^s[ií]$/i, /^ok$/i, /^dale$/i, /^va$/i, /^claro$/i, /^simon$/i, /^sale$/i, /^perfecto$/i, /adelante/i, /de\s*acuerdo/i, /^yes$/i, /^listo$/i],
             peso: 4
         },
         confirmar_no: {
@@ -325,7 +216,40 @@ class ConversationContext {
             this.conversations.set(numero, {
                 etapa: 'inicio',
                 ultimaIntencion: null,
-                cotizacionEnvio: null,
+                // Datos de envío estructurados
+                datosEnvio: {
+                    origen: {
+                        nombre: null,
+                        rfc: null,
+                        calle: null,
+                        colonia: null,
+                        ciudad: null,
+                        estado: null,
+                        codigoPostal: null,
+                        telefono: null
+                    },
+                    destino: {
+                        nombre: null,
+                        rfc: null,
+                        calle: null,
+                        colonia: null,
+                        ciudad: null,
+                        estado: null,
+                        codigoPostal: null,
+                        telefono: null
+                    },
+                    paquete: {
+                        contenido: null,
+                        uso: null,
+                        material: null,
+                        precioPorPieza: null,
+                        paqueteria: null,
+                        alto: null,
+                        ancho: null,
+                        largo: null,
+                        peso: null
+                    }
+                },
                 datosCliente: {},
                 historial: [],
                 inicioConversacion: Date.now(),
@@ -365,7 +289,6 @@ class CelexpressAI {
     constructor() {
         this.context = new ConversationContext();
         this.credito = planesCredito;
-        this.envios = tarifarioEnvios;
     }
 
     async procesarMensaje(numero, texto, nombreUsuario = null) {
@@ -384,29 +307,29 @@ class CelexpressAI {
     async generarRespuesta(numero, intencion, ctx, nombreUsuario) {
         const intent = intencion.principal.nombre;
 
-        // MANEJO POR ETAPA
-        if (ctx.etapa === 'esperando_peso') {
-            const pesoMatch = intencion.textoOriginal.match(/(\d+(?:\.\d+)?)/);
-            if (pesoMatch) {
-                return this.procesarCotizacionEnvio(numero, parseFloat(pesoMatch[1]));
-            } else {
-                return "Por favor, dime el peso en kilogramos. Por ejemplo: *5* o *3.5 kg* 📦";
-            }
+        // ============================================================
+        // 📦 FLUJO DE ENVÍOS PASO A PASO
+        // ============================================================
+        
+        // PASO 1: Capturando datos de ORIGEN
+        if (ctx.etapa === 'envio_capturando_origen') {
+            return this.procesarDatosOrigen(numero, intencion.textoOriginal, ctx);
         }
 
-        if (ctx.etapa === 'esperando_confirmacion_envio') {
-            if (intent === 'confirmar_si') {
-                return this.capturarDatosEnvio(numero);
-            } else if (intent === 'confirmar_no') {
-                this.context.update(numero, { etapa: 'menu_principal' });
-                return "Sin problema 👍 ¿Hay algo más en lo que te pueda ayudar?";
-            }
+        // PASO 2: Capturando datos de DESTINO
+        if (ctx.etapa === 'envio_capturando_destino') {
+            return this.procesarDatosDestino(numero, intencion.textoOriginal, ctx);
         }
 
-        if (ctx.etapa === 'capturando_datos') {
-            return this.procesarDatosCliente(numero, intencion.textoOriginal, ctx);
+        // PASO 3: Capturando datos ADICIONALES del paquete
+        if (ctx.etapa === 'envio_capturando_paquete') {
+            return this.procesarDatosPaquete(numero, intencion.textoOriginal, ctx);
         }
 
+        // ============================================================
+        // 📱 FLUJO DE CELULARES
+        // ============================================================
+        
         if (ctx.etapa === 'preguntando_capacidad_pago') {
             const montoMatch = intencion.textoOriginal.match(/\$?\s*(\d+)/);
             if (montoMatch) {
@@ -414,7 +337,13 @@ class CelexpressAI {
             }
         }
 
+        if (ctx.etapa === 'capturando_datos_celular') {
+            return this.procesarDatosClienteCelular(numero, intencion.textoOriginal, ctx);
+        }
+
+        // ============================================================
         // MANEJO POR INTENCIÓN
+        // ============================================================
         switch (intent) {
             case 'saludo':
                 this.context.update(numero, { etapa: 'menu_principal' });
@@ -438,15 +367,7 @@ class CelexpressAI {
                 return "¿Cuánto puedes pagar a la semana? Dime una cantidad, por ejemplo: *$300*";
 
             case 'cotizar_envio':
-                this.context.update(numero, { etapa: 'esperando_peso' });
-                return `¡Claro que sí! 📦\n\n¿Cuántos kilogramos pesa tu paquete?\n\nSolo dime el número, por ejemplo: *5* o *3.5*`;
-
-            case 'dar_peso':
-                const pesoDirecto = parseFloat(intencion.principal.grupos?.[0] || intencion.textoOriginal.match(/(\d+(?:\.\d+)?)/)?.[1]);
-                if (pesoDirecto && ctx.etapa === 'esperando_peso') {
-                    return this.procesarCotizacionEnvio(numero, pesoDirecto);
-                }
-                break;
+                return this.iniciarCotizacionEnvio(numero);
 
             case 'quiere_humano':
                 return this.mostrarContacto(numero);
@@ -462,6 +383,9 @@ class CelexpressAI {
                 return respuestasHumanizadas.random(respuestasHumanizadas.despedidas);
 
             default:
+                if (ctx.etapa === 'mostrado_capacidad') {
+                    return this.continuarFlujoCelular(numero, ctx, intencion);
+                }
                 if (ctx.etapa !== 'inicio' && ctx.etapa !== 'menu_principal') {
                     return this.continuarConversacion(numero, ctx, intencion);
                 }
@@ -469,7 +393,294 @@ class CelexpressAI {
         }
     }
 
-    // CELULARES
+    // ============================================================
+    // 📦 NUEVO FLUJO DE ENVÍOS - PASO A PASO
+    // ============================================================
+
+    iniciarCotizacionEnvio(numero) {
+        this.context.update(numero, { etapa: 'envio_capturando_origen' });
+
+        return `
+📦 *¡Claro! Te ayudo con tu cotización de envío*
+
+Vamos paso a paso para darte la mejor opción.
+
+━━━━━━━━━━━━━━━━━━━━━
+*1️⃣ DATOS DE ORIGEN*
+━━━━━━━━━━━━━━━━━━━━━
+
+Envíame en *un solo mensaje* los datos de quien envía:
+
+• Nombre y apellido
+• RFC o Tax ID (si aplica, si no pon "N/A")
+• Calle y número
+• Colonia
+• Ciudad
+• Estado
+• Código postal
+• Teléfono
+
+*Ejemplo:*
+Juan Pérez García
+N/A
+Av. Insurgentes 123
+Roma Norte
+Ciudad de México
+CDMX
+06700
+5512345678
+        `.trim();
+    }
+
+    procesarDatosOrigen(numero, texto, ctx) {
+        const lineas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        if (lineas.length < 5) {
+            return `
+📝 Parece que faltan algunos datos de origen.
+
+Por favor envía todos los datos en un mensaje:
+• Nombre y apellido
+• RFC o Tax ID (o "N/A")
+• Calle y número
+• Colonia
+• Ciudad
+• Estado
+• Código postal
+• Teléfono
+
+Así puedo procesar tu cotización correctamente 😊
+            `.trim();
+        }
+
+        // Extraer teléfono (buscar número de 10+ dígitos)
+        const telefonoMatch = texto.match(/\b\d{10,15}\b/);
+        
+        // Extraer código postal (puede ser internacional: 4-10 dígitos)
+        const cpMatch = texto.match(/\b\d{4,10}\b/g);
+        
+        // Guardar datos de origen
+        ctx.datosEnvio.origen = {
+            nombre: lineas[0] || null,
+            rfc: lineas[1] || 'N/A',
+            calle: lineas[2] || null,
+            colonia: lineas[3] || null,
+            ciudad: lineas[4] || null,
+            estado: lineas[5] || null,
+            codigoPostal: lineas[6] || (cpMatch ? cpMatch[0] : null),
+            telefono: lineas[7] || (telefonoMatch ? telefonoMatch[0] : null)
+        };
+
+        // También guardar para el registro de lead
+        ctx.datosCliente.cpOrigen = ctx.datosEnvio.origen.codigoPostal;
+        ctx.datosCliente.nombre = ctx.datosEnvio.origen.nombre;
+        ctx.datosCliente.telefono = ctx.datosEnvio.origen.telefono;
+
+        this.context.update(numero, { 
+            etapa: 'envio_capturando_destino',
+            datosEnvio: ctx.datosEnvio,
+            datosCliente: ctx.datosCliente
+        });
+
+        return `
+✅ *Datos de origen registrados*
+
+━━━━━━━━━━━━━━━━━━━━━
+*2️⃣ DATOS DE DESTINO*
+━━━━━━━━━━━━━━━━━━━━━
+
+Ahora envíame los datos de quien *recibe* el paquete:
+
+• Nombre y apellido
+• RFC o Tax ID (si aplica, si no pon "N/A")
+• Calle y número
+• Colonia
+• Ciudad
+• Estado
+• Código postal
+• Teléfono
+
+*Ejemplo:*
+María López Hernández
+N/A
+Calle Reforma 456
+Centro
+Guadalajara
+Jalisco
+44100
+3312345678
+        `.trim();
+    }
+
+    procesarDatosDestino(numero, texto, ctx) {
+        const lineas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        if (lineas.length < 5) {
+            return `
+📝 Parece que faltan algunos datos de destino.
+
+Por favor envía todos los datos en un mensaje:
+• Nombre y apellido
+• RFC o Tax ID (o "N/A")
+• Calle y número
+• Colonia
+• Ciudad
+• Estado
+• Código postal
+• Teléfono
+
+Para continuar con tu cotización 📦
+            `.trim();
+        }
+
+        // Extraer teléfono
+        const telefonoMatch = texto.match(/\b\d{10,15}\b/);
+        
+        // Extraer código postal
+        const cpMatch = texto.match(/\b\d{4,10}\b/g);
+        
+        // Guardar datos de destino
+        ctx.datosEnvio.destino = {
+            nombre: lineas[0] || null,
+            rfc: lineas[1] || 'N/A',
+            calle: lineas[2] || null,
+            colonia: lineas[3] || null,
+            ciudad: lineas[4] || null,
+            estado: lineas[5] || null,
+            codigoPostal: lineas[6] || (cpMatch ? cpMatch[0] : null),
+            telefono: lineas[7] || (telefonoMatch ? telefonoMatch[0] : null)
+        };
+
+        // También guardar para el registro de lead
+        ctx.datosCliente.cpDestino = ctx.datosEnvio.destino.codigoPostal;
+
+        this.context.update(numero, { 
+            etapa: 'envio_capturando_paquete',
+            datosEnvio: ctx.datosEnvio,
+            datosCliente: ctx.datosCliente
+        });
+
+        return `
+✅ *Datos de destino registrados*
+
+━━━━━━━━━━━━━━━━━━━━━
+*3️⃣ DATOS DEL PAQUETE*
+━━━━━━━━━━━━━━━━━━━━━
+
+Por último, necesito los detalles del paquete:
+
+• Contenido del paquete (qué es, uso, material)
+• Precio por pieza (valor declarado)
+• Paquetería preferida (FedEx, DHL, Estafeta o "Sin preferencia")
+• Medidas en cm: Alto x Ancho x Largo
+• Peso en kg
+
+*Ejemplo:*
+Laptop para trabajo, plástico y metal
+$15,000
+Sin preferencia
+30 x 40 x 10
+2.5
+        `.trim();
+    }
+
+    procesarDatosPaquete(numero, texto, ctx) {
+        const lineas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        if (lineas.length < 3) {
+            return `
+📝 Necesito un poco más de información del paquete:
+
+• Contenido (qué es, uso, material)
+• Precio por pieza
+• Paquetería preferida
+• Medidas en cm (Alto x Ancho x Largo)
+• Peso en kg
+
+Esto me ayuda a darte la mejor cotización 📦
+            `.trim();
+        }
+
+        // Extraer peso (número seguido de kg o solo número con decimales)
+        const pesoMatch = texto.match(/(\d+(?:[.,]\d+)?)\s*(kg|kilos?)?/i);
+        
+        // Extraer medidas
+        const medidasMatch = texto.match(/(\d+)\s*x\s*(\d+)\s*x\s*(\d+)/i);
+        
+        // Extraer precio
+        const precioMatch = texto.match(/\$?\s*([\d,]+(?:\.\d{2})?)/);
+
+        // Guardar datos del paquete
+        ctx.datosEnvio.paquete = {
+            contenido: lineas[0] || null,
+            precioPorPieza: lineas[1] || (precioMatch ? precioMatch[0] : null),
+            paqueteria: lineas[2] || 'Sin preferencia',
+            medidas: lineas[3] || (medidasMatch ? `${medidasMatch[1]} x ${medidasMatch[2]} x ${medidasMatch[3]}` : null),
+            peso: lineas[4] || (pesoMatch ? pesoMatch[1] : null)
+        };
+
+        if (medidasMatch) {
+            ctx.datosEnvio.paquete.alto = medidasMatch[1];
+            ctx.datosEnvio.paquete.ancho = medidasMatch[2];
+            ctx.datosEnvio.paquete.largo = medidasMatch[3];
+        }
+
+        this.context.update(numero, { 
+            etapa: 'envio_datos_completos',
+            datosEnvio: ctx.datosEnvio,
+            cotizacionEnvio: ctx.datosEnvio // Para el registro de lead
+        });
+
+        // Generar resumen completo
+        const origen = ctx.datosEnvio.origen;
+        const destino = ctx.datosEnvio.destino;
+        const paquete = ctx.datosEnvio.paquete;
+
+        return `
+✅ *¡SOLICITUD DE COTIZACIÓN REGISTRADA!*
+
+━━━━━━━━━━━━━━━━━━━━━
+📍 *ORIGEN*
+━━━━━━━━━━━━━━━━━━━━━
+👤 ${origen.nombre}
+🏠 ${origen.calle}, ${origen.colonia}
+🌆 ${origen.ciudad}, ${origen.estado}
+📮 CP: ${origen.codigoPostal}
+📞 ${origen.telefono}
+
+━━━━━━━━━━━━━━━━━━━━━
+📍 *DESTINO*
+━━━━━━━━━━━━━━━━━━━━━
+👤 ${destino.nombre}
+🏠 ${destino.calle}, ${destino.colonia}
+🌆 ${destino.ciudad}, ${destino.estado}
+📮 CP: ${destino.codigoPostal}
+📞 ${destino.telefono}
+
+━━━━━━━━━━━━━━━━━━━━━
+📦 *PAQUETE*
+━━━━━━━━━━━━━━━━━━━━━
+📋 ${paquete.contenido}
+💰 Valor: ${paquete.precioPorPieza}
+📐 Medidas: ${paquete.medidas} cm
+⚖️ Peso: ${paquete.peso} kg
+🚚 Paquetería: ${paquete.paqueteria}
+
+━━━━━━━━━━━━━━━━━━━━━
+
+🎯 *Un asesor de CelExpress se comunicará contigo en breve* para proporcionarte las opciones de precio y confirmar los detalles de tu envío.
+
+📞 O si prefieres, contáctanos directamente:
+*${CONTACTO.telefono}*
+⏰ ${CONTACTO.horario}
+
+¡Gracias por tu preferencia! 🙏
+        `.trim();
+    }
+
+    // ============================================================
+    // 📱 CELULARES
+    // ============================================================
     mostrarInfoCelulares(numero) {
         this.context.update(numero, { etapa: 'preguntando_capacidad_pago' });
 
@@ -557,91 +768,54 @@ O si prefieres, déjame tus datos y un asesor te contacta 👇
         `.trim();
     }
 
-    // ENVÍOS
-    procesarCotizacionEnvio(numero, peso) {
-        const cotizacion = this.envios.cotizar(peso);
+    continuarFlujoCelular(numero, ctx, intencion) {
+        const texto = intencion.textoOriginal.toLowerCase();
         
-        if (cotizacion.error) {
-            return cotizacion.mensaje;
-        }
+        if (/si|sí|me interesa|quiero|va|dale|ok|listo/i.test(texto)) {
+            this.context.update(numero, { etapa: 'capturando_datos_celular', tipoDatos: 'celular' });
+            return `
+¡Excelente! 🎉
 
-        this.context.update(numero, { 
-            etapa: 'esperando_confirmacion_envio',
-            cotizacionEnvio: cotizacion
-        });
-
-        return `${this.envios.formatearCotizacion(cotizacion)}\n\n¿Te gustaría proceder con alguna opción? 🚚`;
-    }
-
-    capturarDatosEnvio(numero) {
-        this.context.update(numero, { etapa: 'capturando_datos', tipoDatos: 'envio' });
-
-        return `
-¡Perfecto! 📦
-
-Para generar tu guía necesito tus datos.
-
-📝 *Envíame TODO en UN SOLO MENSAJE:*
+Para que un asesor te contacte, envíame en UN SOLO MENSAJE:
 
 1. Nombre completo
 2. Teléfono (10 dígitos)
 3. Correo electrónico
-4. CP origen (5 dígitos)
-5. CP destino (5 dígitos)
 
 *Ejemplo:*
 Juan Pérez García
 5512345678
 juan@email.com
-06600
-44100
-        `.trim();
+            `.trim();
+        }
+
+        return `${respuestasHumanizadas.random(respuestasHumanizadas.noEntiendo)}\n\n¿Te ayudo con celulares 📱 o envíos 📦?\n\n📞 Contacto directo: ${CONTACTO.telefono}`;
     }
 
-    // CAPTURA DE DATOS CON CÓDIGOS POSTALES
-    procesarDatosCliente(numero, texto, ctx) {
+    procesarDatosClienteCelular(numero, texto, ctx) {
         const lineas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         
         // Extraer email
         const emailMatch = texto.match(/[\w.-]+@[\w.-]+\.\w+/);
-        if (emailMatch && !ctx.datosCliente.email) {
+        if (emailMatch) {
             ctx.datosCliente.email = emailMatch[0];
         }
         
         // Extraer teléfono (10 dígitos)
         const telefonoMatch = texto.match(/\b\d{10}\b/);
-        if (telefonoMatch && !ctx.datosCliente.telefono) {
+        if (telefonoMatch) {
             ctx.datosCliente.telefono = telefonoMatch[0];
         }
         
-        // Extraer códigos postales (5 dígitos) - buscar todos
-        const codigosPostales = texto.match(/\b\d{5}\b/g) || [];
-        
-        if (ctx.tipoDatos === 'envio' && codigosPostales.length >= 2) {
-            if (!ctx.datosCliente.cpOrigen) {
-                ctx.datosCliente.cpOrigen = codigosPostales[0];
-            }
-            if (!ctx.datosCliente.cpDestino) {
-                ctx.datosCliente.cpDestino = codigosPostales[1];
-            }
-        } else if (ctx.tipoDatos === 'envio' && codigosPostales.length === 1) {
-            if (!ctx.datosCliente.cpOrigen) {
-                ctx.datosCliente.cpOrigen = codigosPostales[0];
-            } else if (!ctx.datosCliente.cpDestino) {
-                ctx.datosCliente.cpDestino = codigosPostales[0];
-            }
-        }
-        
-        // Extraer nombre (línea con 2+ palabras, sin números de 10 o 5 dígitos, sin @)
+        // Extraer nombre (línea con 2+ palabras, sin números largos, sin @)
         const posibleNombre = lineas.find(l => 
             l.split(' ').length >= 2 && 
             !l.match(/\b\d{10}\b/) && 
-            !l.match(/\b\d{5}\b/) &&
             !l.includes('@') &&
             l.length > 5
         );
         
-        if (posibleNombre && !ctx.datosCliente.nombre) {
+        if (posibleNombre) {
             ctx.datosCliente.nombre = posibleNombre;
         }
 
@@ -652,11 +826,6 @@ juan@email.com
         if (!ctx.datosCliente.nombre) faltantes.push('nombre completo');
         if (!ctx.datosCliente.telefono) faltantes.push('teléfono (10 dígitos)');
         if (!ctx.datosCliente.email) faltantes.push('correo electrónico');
-        
-        if (ctx.tipoDatos === 'envio') {
-            if (!ctx.datosCliente.cpOrigen) faltantes.push('CP origen (5 dígitos)');
-            if (!ctx.datosCliente.cpDestino) faltantes.push('CP destino (5 dígitos)');
-        }
 
         if (faltantes.length > 0) {
             return `📝 ¡Gracias! Ya tengo algunos datos.\n\nAún me falta:\n${faltantes.map(f => `• ${f}`).join('\n')}\n\n¿Me los compartes?`;
@@ -665,32 +834,25 @@ juan@email.com
         // Datos completos
         this.context.update(numero, { etapa: 'datos_completos' });
 
-        let resumen = `
+        return `
 ✅ *¡Datos registrados correctamente!*
 
 📋 *Resumen:*
 • Nombre: ${ctx.datosCliente.nombre}
 • Teléfono: ${ctx.datosCliente.telefono}
-• Email: ${ctx.datosCliente.email}`;
+• Email: ${ctx.datosCliente.email}
 
-        if (ctx.tipoDatos === 'envio') {
-            resumen += `
-• CP Origen: ${ctx.datosCliente.cpOrigen}
-• CP Destino: ${ctx.datosCliente.cpDestino}`;
-        }
-
-        resumen += `
-
-Un asesor de *CelExpress* te contactará en breve para continuar.
+Un asesor de *CelExpress* te contactará en breve para mostrarte los equipos disponibles.
 
 📞 También puedes llamarnos: *${CONTACTO.telefono}*
 
-¡Gracias por tu preferencia! 🙏`;
-
-        return resumen.trim();
+¡Gracias por tu preferencia! 🙏
+        `.trim();
     }
 
-    // SOPORTE
+    // ============================================================
+    // 📞 SOPORTE
+    // ============================================================
     mostrarContacto(numero) {
         this.context.update(numero, { etapa: 'contacto' });
 
@@ -747,26 +909,6 @@ Lleva tu paquete a CelExpress más cercano
     continuarConversacion(numero, ctx, intencion) {
         const texto = intencion.textoOriginal.toLowerCase();
         
-        if (ctx.etapa === 'mostrado_capacidad') {
-            if (/si|sí|me interesa|quiero|va|dale|ok/i.test(texto)) {
-                this.context.update(numero, { etapa: 'capturando_datos', tipoDatos: 'celular' });
-                return `
-¡Excelente! 🎉
-
-Para que un asesor te contacte, envíame en UN SOLO MENSAJE:
-
-1. Nombre completo
-2. Teléfono (10 dígitos)
-3. Correo electrónico
-
-*Ejemplo:*
-Juan Pérez García
-5512345678
-juan@email.com
-                `.trim();
-            }
-        }
-
         return `${respuestasHumanizadas.random(respuestasHumanizadas.noEntiendo)}\n\n¿Te ayudo con celulares 📱 o envíos 📦?\n\n📞 Contacto directo: ${CONTACTO.telefono}`;
     }
 }
@@ -777,7 +919,6 @@ juan@email.com
 module.exports = {
     CelexpressAI,
     planesCredito,
-    tarifarioEnvios,
     detectarIntencion,
     respuestasHumanizadas,
     ConversationContext,
